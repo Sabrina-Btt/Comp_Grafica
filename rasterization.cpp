@@ -144,17 +144,17 @@ std::vector<Pixel> rasterizeTriangle(std::array<vec2, 3> P){
         pontos.clear();
 
         if(deltax1==0){
-            if(P[1].y <= y && y<= P[0].y)
+            if((P[0].y <= y && y<= P[1].y) || (P[1].y <= y && y<= P[0].y))
               pontos.push_back({P[0].x,y});
         }
 
         if(deltax2==0){
-            if(P[2].y <= y && y<= P[1].y)
+            if((P[1].y  <= y && y<= P[2].y) || (P[2].y <= y && y<= P[1].y))
               pontos.push_back({P[1].x,y});
         }
 
         if(deltax3==0){
-            if(P[2].y <= y && y<= P[0].y)
+            if((P[0].y <= y && y<= P[2].y) || (P[2].y <= y && y<= P[0].y))
               pontos.push_back({P[0].x,y});
         }
 
