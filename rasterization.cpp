@@ -121,11 +121,10 @@ std::vector<Pixel> rasterizeTriangle(std::array<vec2, 3> P){
 	std::vector<Pixel> out;
 	std::vector<Pixel> pontos;
 
-	float maxx = std::max(ceil(P[0].x), std::max(ceil(P[1].x),ceil(P[2].x)));
-	float minx = std::min(floor(P[0].x), std::min(floor(P[1].x),floor(P[2].x)));
-	float maxy = std::max(ceil(P[0].y), std::max(ceil(P[1].y),ceil(P[2].y)));
-	float miny = std::min(floor(P[0].y), std::min(floor(P[1].y),floor(P[2].y)));
-
+	int maxy = floor(std::max(P[0].y, std::max(P[1].y,P[2].y)));
+	int miny = ceil(std::min(P[0].y, std::min(P[1].y,P[2].y)));
+	
+	
 	float deltax1 = (P[1].x - P[0].x);
 	float m1 = (P[1].y - P[0].y)/deltax1;
 	float b1 = P[0].y - m1*(P[0].x);
@@ -163,13 +162,13 @@ std::vector<Pixel> rasterizeTriangle(std::array<vec2, 3> P){
         float v3 = (float) (y - b3)/m3;
 
 
-        if(minx <= v1 && v1 <= maxx)
+        if(std::min(P[0].x,P[1].x) <= v1 && v1 <= std::max(P[0].x,P[1].x))
             pontos.push_back({v1,y});
 
-        if(minx <= v2 && v2 <= maxx)
+        if(std::min(P[1].x,P[2].x) <= v2 && v2 <= std::max(P[1].x,P[2].x))
             pontos.push_back({v2,y});
 
-        if(minx <= v3 && v3 <= maxx)
+        if(std::min(P[0].x,P[2].x) <= v3 && v3 <= std::max(P[0].x,P[2].x))
             pontos.push_back({v3,y});
 
         if(pontos.size()==2){
@@ -182,8 +181,8 @@ std::vector<Pixel> rasterizeTriangle(std::array<vec2, 3> P){
 
 
         else if(pontos.size()==3){
-            int maxsx = std::max(pontos[0].x, std::max(pontos[1].x, pontos[2].x));
-            int minsx = std::min(pontos[0].x, std::min(pontos[1].x, pontos[2].x));
+            int maxsx = floor(std::max(pontos[0].x, std::max(pontos[1].x, pontos[2].x)));
+            int minsx = ceil(std::min(pontos[0].x, std::min(pontos[1].x, pontos[2].x)));
 
             for(int x=minsx; x<= maxsx; x++)
                 out.push_back({x,y});
