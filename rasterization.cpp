@@ -172,8 +172,8 @@ std::vector<Pixel> rasterizeTriangle(std::array<vec2, 3> P){
             pontos.push_back({v3,y});
 
         if(pontos.size()==2){
-            int maxsx = std::max(pontos[0].x, pontos[1].x);
-            int minsx = std::min(pontos[0].x, pontos[1].x);
+            int maxsx = floor(std::max(pontos[0].x, pontos[1].x));
+            int minsx = ceil(std::min(pontos[0].x, pontos[1].x));
 
             for(int x=minsx; x<= maxsx; x++)
                 out.push_back({x,y});
