@@ -23,16 +23,13 @@ class Graphics2D{
 		img.savePNG(filename);
 	}
 
-	void paint(Pixel p, Color c){
-		if(p.x >= 0 && p.y >= 0 && p.x < img.width && p.y < img.height)
-			img(p.x,p.y) = c;
-	}
+
 
 
 	template<class Prims>
 	void draw(const std::vector<Vec2Col>& V, const Prims& P){
 		for(size_t i = 0; i < P.size(); i++)
-			draw_primitive(assemble(V, P[i]));
+			drawPrimitive(assemble(V, P[i]));
 	}
 
 
@@ -43,12 +40,21 @@ class Graphics2D{
 		Color color
 	){
 		for(size_t i = 0; i < P.size(); i++)
-			draw_primitive(assemble(V,P[i]), color);
+			drawPrimitive(assemble(V,P[i]), color);
 	}
 
 	private:
 
+    void paint(Pixel p, Color c){
+		if(p.x >= 0 && p.y >= 0 && p.x < img.width && p.y < img.height)
+			img(p.x,p.y) = c;
+	}
+
+
 	void drawPrimitive(Line<Vec2Col> line){
+		if(clip(line))
+            return;
+
 		vec2 v0 = line[0].position, v1 = line[1].position;
 		Color c0 = line[0].color, c1 = line[1].color;
 
@@ -63,8 +69,62 @@ class Graphics2D{
 		};
 	}
 
+    bool clip(Line<Vec2Col>& line){
+        int N=4;
+        float xmin = 30, xmax = (img.width)-30;
+        float ymin = 30, ymax = (img.height)-30;
 
-	void draw_primitive(Triangle<Vec2Col> tri){
+        std::vector<float> p;
+        std::vector<float> q;
+
+        float  t_in = 0;
+        float  t_out = 1;
+
+        vec2 a,b;
+
+        a = line[0].position;
+        b = line[1].position;
+        Color ca=line[0].color;
+        Color cb=line[1].color;
+
+        p.push_back ((b.x - a.x)*(-1));
+        p.push_back (b.x - a.x);
+        p.push_back ((b.y - a.y)*(-1));
+        p.push_back (b.y - a.y);
+
+        q.push_back (a.x - xmin);
+        q.push_back (xmax - a.x);
+        q.push_back (a.y - ymin);
+        q.push_back (ymax - a.y);
+
+
+
+        for(int i=0; i<N;i++){
+            if(p[i]<0)
+                t_in = std::max(t_in, (q[i]/p[i]));
+            else if(p[i] > 0)
+                t_out = std::min(t_out, (q[i]/p[i]));
+            else if(q[i] < 0)
+                return true;
+
+            }
+
+
+        if(t_in > t_out)
+           return true;
+
+        else{
+             line[0].position = lerp(t_in,a,b);
+             line[0].color=lerp(t_in,ca,cb);
+             line[1].position = lerp(t_out,a,b);
+             line[1].color=lerp(t_out,ca,cb);
+
+        }
+        return false;
+    }
+
+
+	void drawPrimitive(Triangle<Vec2Col> tri){
 		vec2 v0 = tri[0].position, v1 = tri[1].position, v2 = tri[2].position;
 		Color c0 = tri[0].color, c1 = tri[1].color, c2 = tri[2].color;
 
