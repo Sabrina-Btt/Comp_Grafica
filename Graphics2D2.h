@@ -125,6 +125,9 @@ class Graphics2D{
 
 
 	void drawPrimitive(Triangle<Vec2Col> tri){
+		if(clip(tri))
+			return;
+
 		vec2 v0 = tri[0].position, v1 = tri[1].position, v2 = tri[2].position;
 		Color c0 = tri[0].color, c1 = tri[1].color, c2 = tri[2].color;
 
@@ -138,6 +141,68 @@ class Graphics2D{
         }
 
     }
+
+
+	bool clip(Triangle<Vec2Col>& tri, Semiplane S){
+        if(S.has(tri[0].position)==false && S.has(tri[1].position)==false && S.has(tri[2].position)==false)
+           return true;
+         if(S.has(tri[0].position) && S.has(tri[1].position) && S.has(tri[2].position))
+           return false;
+
+        std::vector<Vec2Col> L;
+
+        int j =1;
+
+
+            for(size_t i=0; i<tri.size(); i++, j++){
+                if(i==2)
+                    j=0;
+
+
+                if((S.has(tri[i].position)== false && S.has(tri[j].position)==true) || (S.has(tri[i].position)== true && S.has(tri[j].position)==false)){
+                    float t_int = S.intersect(tri[i].position, tri[j].position);
+                    Vec2Col aux1;
+                    aux1.position = lerp(t_int,tri[i].position, tri[j].position);
+                    aux1.color = lerp(t_int,tri[i].color, tri[j].color);
+                    L.push_back(aux1);
+                }
+
+                if(S.has(tri[j].position))
+                    L.push_back(tri[j]);
+
+
+            }
+
+                tri = {L[0], L[1], L[2]};
+                if(L.size()==4)
+                {
+                    Triangle<Vec2Col> ntri = {L[0], L[2], L[3]};
+                    drawPrimitive(ntri);
+                }
+
+
+        return false;
+
+    }
+
+     bool clip(Triangle<Vec2Col>& tri){
+		float xmin = 30-0.5, ymin = 30-0.5;
+		float xmax = img.width-29.5, ymax = img.height-29.5;
+
+		Semiplane walls[] = {
+			{{xmin, ymin}, {1, 0}}, // left
+			{{xmin, ymin}, {0, 1}}, // down
+			{{xmax, ymax}, {-1,0}}, // right
+			{{xmax, ymax}, {0,-1}}, // top
+		};
+		for(Semiplane wall: walls)
+			if(clip(tri, wall))
+				return true;
+
+		return false;
+	}
+
+
 
 };
 
