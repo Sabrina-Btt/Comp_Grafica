@@ -3,6 +3,7 @@
 
 #include "vec.h"
 
+
 /*******************************************************************/
 /************************ mat2 *************************************/
 struct mat2{
@@ -212,4 +213,53 @@ inline mat4 loadIdentity(){
 	};
 }
 
+//Manipulação de matrizes
+mat4 translate(float a, float b, float c){
+    return{
+        1, 0, 0, a,
+        0, 1, 0, b,
+        0, 0, 1, c,
+        0, 0, 0, 1
+    };
+}
+
+mat4 scale(float a, float b, float c){
+    return{
+        a, 0, 0, 0,
+        0, b, 0, 0,
+        0, 0, c, 0,
+        0, 0, 0, 1
+    };
+}
+
+mat4 rotate_x(float theta){
+    return{
+        1,     0,          0,       0,
+        0, cos(theta), -sin(theta), 0,
+        0, sin(theta), cos(theta),  0,
+        0,     0,          0,       1
+    };
+}
+
+mat4 rotate_y(float theta){
+    return{
+        cos(theta),  0, sin(theta),  0,
+            0,       1,     0,       0,
+        -sin(theta), 0, cos(theta),  0,
+            0,       0,     0,       1
+    };
+}
+
+mat4 rotate_z(float theta){
+    return{
+        cos(theta), -sin(theta),  0,  0,
+        sin(theta),  cos(theta),  0,  0,
+             0,          0,       1,  0,
+             0,          0,       0,  1
+    };
+}
+
+
+
 #endif
+
