@@ -23,7 +23,6 @@ Image construtor(Image bg, ImageRGBA I, int posy, int posx){
 
 int main(){
 	Image bg("wintertileset/png/BG/BG.png");
-	bg=bg(2000,1093)
 	//background - size - 1800/893;
 
 	//Tiles
