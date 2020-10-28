@@ -1,0 +1,151 @@
+#include "Image.h"
+#include "ImageRGBA.h"
+#define FPS 20
+
+///Grupo: Sabrina Sampaio, Tamara Dias, Wanderley Rangel
+///Links para as imagens originais:
+///https://www.gameart2d.com/ninja-girl---free-sprites.html
+///https://www.gameart2d.com/ninja-adventure---free-sprites.html
+
+struct Personagem{
+    int posX,posY;
+    int velX,velY;
+}typedef Personagem;
+
+
+int contador = 1;
+
+///Utilizamos essa função para desenhar as imagens
+
+void construtor(Image& bg, ImageRGBA I, int posy, int posx){
+    vec4 vcI;
+    vec3 aux;
+
+    for(int y = posy; y < I.height+posy; y++){
+        for(int x = posx; x < I.width+posx; x++){
+            if(y<bg.height && y>=0 && x>=0 && x<bg.width){
+                RGBA cI = I(x-posx,y-posy);
+                vcI=toVec4(cI);
+                if (vcI[3]!=0){
+                    aux = {vcI[0], vcI[1], vcI[2]};
+                    Color auxc = toColor(aux);
+                    bg(x,y) = lerp(vcI[3], bg(x,y), auxc);
+                }
+            }
+        }
+    }
+}
+
+///Utilizamos essa função para carregar as animações e colocá-las em um vetor
+
+vector<ImageRGBA> Animacao(int valor,int tam,char nome[30],char pasta[30]){
+    char nome1 [40];
+    vector<ImageRGBA> anim;
+    for(int i=0;i<tam;i++){
+        sprintf(nome1,"%s/png/%s (%d).png",pasta,nome,i+valor);
+        ImageRGBA img(nome1);
+        anim.push_back(img);
+    }
+    return anim;
+}
+
+///Utilizamos essa função para desenhar as animações a partir das posições de cada personagem
+
+vector<Personagem> desenhaA(Image Background,vector<vector<ImageRGBA>>anim,vector<Personagem> p,float seg){
+    char nome[40];
+    Image bg;
+    for(int i=0;i<seg*FPS;i++){
+        bg=Background;
+        sprintf(nome,"./animacoes/anim%d.png",contador);
+        for(int k=0;k<anim.size();k++){
+            construtor(bg,anim[k][i%anim[k].size()],p[k].posY,p[k].posX);
+            p[k].posX+=p[k].velX;
+            p[k].posY+=p[k].velY;
+        }
+        bg.savePNG(nome);
+        contador++;
+    }
+    return p;
+}
+
+///Utilizamos essa função para definir a velocidade e a posição de cada personagem em relação
+///a quantidade de frames por segundo. Os parâmetros ini e fim representam a posição na qual
+///começaremos e terminaremos de desenhar a animação respectivamente.
+
+Personagem setPersonagem(int iniX, int fimX,int iniY,int fimY,float seg,Personagem p){
+    p.posX=iniX;
+    p.posY=iniY;
+    p.velX=((fimX-iniX)/seg)/FPS;
+    p.velY=((fimY-iniY)/seg)/FPS;
+    return p;
+}
+
+
+
+int main(){
+
+    Personagem P1;
+    Personagem P2;
+    Personagem F;
+
+    ///Carregando as animações em um vetor
+
+    vector<ImageRGBA>run = Animacao(1,9,"run","ninjagirlnew");
+    vector<ImageRGBA>fly = Animacao(1,10,"glide","ninjagirlnew");
+    vector<ImageRGBA>jump = Animacao(1,10,"jump","ninjagirlnew");
+    vector<ImageRGBA>attack = Animacao(1,7,"throw","ninjagirlnew");
+    vector<ImageRGBA>idleb = Animacao(1,10,"idle","ninjaadventurenew");
+    vector<ImageRGBA>faca = Animacao(11,1,"throw","ninjagirlnew");
+    vector<ImageRGBA>idleg = Animacao(1,10,"idle","ninjagirlnew");
+    vector<ImageRGBA>dead = Animacao(1,10,"dead","ninjaadventurenew");
+
+    Image Background("fundo.png");
+
+    ///Criando um vetor de animações e personagens
+
+    vector<vector<ImageRGBA>> anim;
+    vector<Personagem> p;
+
+    ///Iniciamos a animação da ninja correndo e o segundo ninja parado
+    P1=setPersonagem(-150,470,1150,1150,4,P1);
+    P2=setPersonagem(1250,1250,835,835,4,P2);
+    p={P1,P2};
+    anim = {run,idleb};
+    p=desenhaA(Background,anim,p,4);
+
+    ///Logo após repetimos uma vez a animação da ninja pulando
+    P1=setPersonagem(p[0].posX,600,p[0].posY,1225,0.5,p[0]);
+    p={P1,p[1]};
+    anim = {jump,idleb};
+    p=desenhaA(Background,anim,p,0.5);
+
+    ///Realizamos a transição do pulo para o voo na altura determinada
+    P1=setPersonagem(p[0].posX,920,p[0].posY,830,3,p[0]);
+    p={P1,p[1]};
+    anim = {fly,idleb};
+    p=desenhaA(Background,anim,p,3);
+
+    ///Repetimos uma vez a animação da ninja atacando
+    P1=setPersonagem(p[0].posX,p[0].posX,p[0].posY-30,p[0].posY-30,0.5,p[0]);
+    p={P1,p[1]};
+    anim = {attack,idleb};
+    p=desenhaA(Background,anim,p,0.5);
+
+    ///Desenhamos uma sequência de flechas até atingir o ninja parado
+    P1=setPersonagem(p[0].posX,p[0].posX,p[0].posY,p[0].posY,1.5,p[0]);
+    F=setPersonagem(p[0].posX+anim[1][9].width,p[1].posX,p[0].posY+anim[1][9].height*0.5,p[0].posY+anim[1][9].height*0.5,1.5,F);
+    p={P1,p[1],F};
+    anim = {idleg,idleb,faca};
+    p=desenhaA(Background,anim,p,1.5);
+
+    ///Após o segundo ninja ser atingido pela flecha, iniciamos uma vez a animação dele caindo
+    P1=setPersonagem(p[0].posX,p[0].posX,p[0].posY,p[0].posY,0.5,p[0]);
+    P2=setPersonagem(p[1].posX,p[1].posX,p[1].posY-10,p[1].posY-10,0.5,p[1]);
+    p={P1,P2};
+    anim = {idleg,dead};
+    p=desenhaA(Background,anim,p,0.5);
+
+
+
+	return 0;
+}
