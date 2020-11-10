@@ -1,0 +1,161 @@
+#include "Graphics2D.h"
+#include "bezier.h"
+#include "matrix.h"
+#include "math.h"
+#define FPS 12
+
+struct animacao{
+    float velx,vely;
+}typedef animacao;
+
+
+animacao anim;
+int contador = 1;
+
+
+///Função para determinar quanto o personagem deve andar no eixo x e y a partir da variação indicada por quadro
+
+void setposition(float deltax, float deltaY,float tempo, mat3& t){
+    anim.velx=(deltax/tempo)/FPS;
+    anim.vely=(deltaY/tempo)/FPS;
+    t = {
+        1.0, 0.0, anim.velx,
+        0.0, 1.0, anim.vely,
+        0.0, 0.0, 1.0
+    };
+}
+
+///Função para cálculo da rotação. Nossos parâmetros são o eixo de rotação (x,y) e nosso grau de rotação
+
+mat3 rot(float x, float y, float gRot){
+    mat3 T = {
+        1.0, 0.0, x,
+        0.0, 1.0, y,     //Transladamos para o nosso eixo de rotação
+        0.0, 0.0, 1.0
+    };
+    mat3 Ti = {
+        1.0, 0.0, -x,    //Voltamos para o ponto inicial
+        0.0, 1.0, -y,
+        0.0, 0.0, 1.0
+    };
+    float p = M_PI*gRot/180; //Conversão de graus para radianos
+
+    mat3 R = {
+        cos(p), -sin(p), 0.0,
+        sin(p),  cos(p), 0.0,
+           0.0,     0.0, 1.0
+    };
+
+    return T*R*Ti;
+}
+
+
+///Função para desenhar as animações. Recebemos um vetor de posições (que é atualizado a cada chamada), um vetor com nossos
+///LineStrip gerados, um vetor com as transformações que queremos aplicar a cada membro do personagem, o vetor de graus da
+///rotação (um grau para cada membro) e o tempo de cada animação. Temos ainda o parâmetro stopped para saber se o personagem
+///está andando ou parado
+
+void geraImg(vector<vector<vec2>>& Pos, vector<LineStrip>Line, vector<mat3> M,vector <float>grau, float tempo,bool stopped){
+    Graphics2D G(1000, 1000);
+    char nome [40];
+    float t=-360/(FPS*6);
+    mat3 rotP;
+    for(int i=0;i<tempo*FPS;i++){
+        G.clear();
+        if(stopped){
+            rotP={                   //Caso o personagem esteja parado, não realizamos rotação, usamos a identidade
+                1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                0.0, 0.0, 1.0
+                };
+        }else{
+            rotP=rot(Pos[2][0].x,Pos[2][0].y,t);            //Caso contrário, o personagem gira em torno de si
+        }
+        for(int k=0;k<Pos.size();k++){
+            mat3 rotacao= rot(Pos[k][0].x,Pos[k][0].y,grau[k]);
+            Pos[k]=(rotP*rotacao*(M[k])*Pos[k]);                  //Aplicamos as transformações normalmente aos pontos
+            G.draw(Pos[k], Line[k], brown);                        //do vetor
+        }
+        sprintf(nome,"./anim/animacao%d.png",contador);
+        G.savePNG(nome);
+        contador++;
+	}
+}
+
+
+
+int main(){
+
+    ///Carregamos os pontos iniciais do nosso personagem a partir dos arquivos .txt
+	vector<vec2> pontos_H = loadCurve("./bear/bearHead.txt");
+	vector<vec2> pontos_B = loadCurve("./bear/bearBody.txt");
+	vector<vec2> pontos_LA = loadCurve("./bear/bearLeftArm.txt");
+	vector<vec2> pontos_RA = loadCurve("./bear/bearRightArm.txt");
+	vector<vec2> pontos_LL = loadCurve("./bear/bearLeftLeg.txt");
+	vector<vec2> pontos_RL = loadCurve("./bear/bearRightLeg.txt");
+
+	///Com os pontos carregados, criamos as splines para formar nosso personagem
+	vector<vec2> H = sample_cubic_bezier_spline(pontos_H, 50);
+	vector<vec2> B = sample_cubic_bezier_spline(pontos_B, 50);
+	vector<vec2> LA = sample_cubic_bezier_spline(pontos_LA, 50);
+	vector<vec2> RA = sample_cubic_bezier_spline(pontos_RA, 50);
+	vector<vec2> LL = sample_cubic_bezier_spline(pontos_LL, 50);
+	vector<vec2> RL = sample_cubic_bezier_spline(pontos_RL, 50);
+
+
+  LineStrip L{H.size()};
+	LineStrip L1{B.size()};
+	LineStrip L2{LA.size()};
+	LineStrip L3{RA.size()};
+	LineStrip L4{LL.size()};
+	LineStrip L5{RL.size()};
+
+    ///Organizamos nossos pontos de cada membro em um vetor de posições, bem como os LineStrip correspondentes
+	vector<vector<vec2>> Pos = {H,B,LA,RA,LL,RL};
+	vector<LineStrip> Line = {L,L1,L2,L3,L4,L5};
+
+
+    ///Matriz de translação
+    mat3 t = {
+        1.0, 0.0, anim.velx,
+        0.0, 1.0, anim.vely,
+        0.0, 0.0, 1.0
+    };
+
+	///Matriz de escala
+    mat3 esc = {
+        1.01, 0.0, 0.0,
+        0.0, 1.01, 0.0,
+        0.0, 0.0, 1.0
+    };
+
+    ///Matriz identidade
+    mat3 id{
+        1.0,0.0,0.0,
+        0.0,1.0,0.0,
+        0.0,0.0,1.0
+    };
+
+    ///Configuramos a velocidade de subida da nossa animação
+    setposition(200,300,3,t);
+
+    ///Para nosso personagem parado, temos uma rotação para os braços e pernas subirem e descerem
+    geraImg(Pos,Line,{id,id,id,id,id,id},{0.5,0.3,-1,1,-1,1},1.5,true);
+    geraImg(Pos,Line,{id,id,id,id,id,id},{-0.5,-0.3,1,-1,1,-1},1.5,true);
+    ///A partir daqui já aplicamos uma rotação e nosso personagem começa a andar até o ponto mais alto
+    geraImg(Pos,Line,{t,t,t,t,t,t},{0.3,0.3,-1,1,-1,1},3,false);
+
+
+    ///Configuramos a velocidade de descida da animação
+    setposition(250,-300,3,t);
+
+    ///Aplicamos a translação mais uma escala para ele aumentar de tamanho, combinado também a rotação
+    geraImg(Pos,Line,{esc*t,esc*t,esc*t,esc*t,esc*t,esc*t},{-0.3,-0.3,1,-1,1,-1},3,false);
+    ///Geramos uma animação semelhante a inicial com o personagem movimentando os braços e pernas
+    geraImg(Pos,Line,{id,id,id,id,id,id},{0.3,0.3,-1,1,-1,1},1.5,true);
+    geraImg(Pos,Line,{id,id,id,id,id,id},{-0.3,-0.3,1,-1,1,-1},1.5,true);
+
+
+
+    return 0;
+}
