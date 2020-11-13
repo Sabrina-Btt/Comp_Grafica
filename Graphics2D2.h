@@ -1,3 +1,4 @@
+
 #ifndef GRAPHICS2D_H
 #define GRAPHICS2D_H
 
@@ -8,6 +9,7 @@
 #include "geometry.h"
 #include "vec.h"
 #include "Color.h"
+#include "VertexUtils.h"
 
 class Graphics2D{
 	Image img;
@@ -24,24 +26,21 @@ class Graphics2D{
 	}
 
 
+    template<class Prims>
+    void draw(const std::vector<Vec2Col>& V,const Prims& P){
+        for(size_t i = 0; i < P.size(); i++)
+            drawPrimitive(assemble(V, P[i]));
+    }
+
+    template<class Prims>
+    void draw(const std::vector<vec2>& V,const Prims& prims,Color col){
+        std::vector<Vec2Col> PV;
+        for(vec2 pos: V)
+            PV.push_back({pos, col});
+        draw(PV, prims);
+    }
 
 
-	template<class Prims>
-	void draw(const std::vector<Vec2Col>& V, const Prims& P){
-		for(size_t i = 0; i < P.size(); i++)
-			drawPrimitive(assemble(V, P[i]));
-	}
-
-
-	template<class Prims>
-	void draw(
-		const std::vector<vec2>& V,
-		const Prims& P,
-		Color color
-	){
-		for(size_t i = 0; i < P.size(); i++)
-			drawPrimitive(assemble(V,P[i]), color);
-	}
 
 	private:
 
@@ -69,10 +68,11 @@ class Graphics2D{
 		};
 	}
 
+
     bool clip(Line<Vec2Col>& line){
         int N=4;
-        float xmin = 30, xmax = (img.width)-30;
-        float ymin = 30, ymax = (img.height)-30;
+        float xmin = 0, xmax = (img.width);
+        float ymin = 0, ymax = (img.height);
 
         std::vector<float> p;
         std::vector<float> q;
@@ -186,8 +186,8 @@ class Graphics2D{
     }
 
      bool clip(Triangle<Vec2Col>& tri){
-		float xmin = 30-0.5, ymin = 30-0.5;
-		float xmax = img.width-29.5, ymax = img.height-29.5;
+		float xmin = -0.5, ymin = -0.5;
+		float xmax = img.width-0.5, ymax = img.height-0.5;
 
 		Semiplane walls[] = {
 			{{xmin, ymin}, {1, 0}}, // left
