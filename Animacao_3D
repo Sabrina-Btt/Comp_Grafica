@@ -1,6 +1,72 @@
 #include "Graphics3D.h"
 #include "vec.h"
-#include "SimpleShader.h"
+#include "Simple_Shader.h"
+#define FPS 12
+
+///Visão lateral
+    mat4 View = lookAt({10, 0, 0}, {0, 0, 0}, {0, 1, 0});
+
+    mat4 Projection = orthogonal(-10, 10, -10, 10, -10, 10);
+
+    Graphics3D G{600, 600};
+
+vector<vec3> V = {
+        {0, 0, 0},
+        {1, 0, 0},
+        {1, 1, 0},
+        {0, 1, 0},
+        {0, 0, 1},
+        {1, 0, 1},
+        {1, 1, 1},
+        {0, 1, 1},
+    };
+    vector<size_t> indices = {
+        0, 1,    1, 2,    2, 3,    3, 0,    4, 5,    5, 6,
+        6, 7,    7, 4,    0, 4,    1, 5,    2, 6,    3, 7
+    };
+    Elements<Lines> Le{indices};
+
+
+
+
+struct anim{
+    float velX,velY,velZ,grauRot;
+}typedef Animacao;
+int contador=1;
+
+
+void setposition(float deltaX, float deltaY,float deltaZ,float gRot,float tempo,Animacao& anim  ){
+    anim.velX=(deltaX/tempo)/FPS;
+    anim.velY=(deltaY/tempo)/FPS;
+    anim.velZ=(deltaZ/tempo)/FPS;
+    float p = M_PI*gRot/180;
+    anim.grauRot=(p/tempo)/FPS;
+}
+
+vector<mat4> movimento(vector<mat4> m,Animacao a){
+    for(int i=0;i<m.size();i++){
+        m[i]=translate(a.velX,a.velY,a.velZ)*m[i];
+    }
+    return m;
+}
+
+void desenhaAnim(vector <mat4> m, float tempo,Animacao a ){
+   char nome [50];
+   Color c = blue;
+   for(int i=0;i<tempo*FPS;i++){
+        G.clear();
+        m=movimento(m,a);
+        for(int i=0; i<m.size(); i++){
+            SimpleShader::M = Projection*View*m[i];
+            SimpleShader::C = c;
+            G.draw<SimpleShader::Varying>(V, Le);
+        }
+        sprintf(nome,"./teste/teste%d.png",contador);
+        G.savePNG(nome);
+        contador++;
+	}
+}
+
 
 
 mat4 rotacao(float x, float y, float z, float theta, char op){
@@ -25,21 +91,7 @@ mat4 rotacao(float x, float y, float z, float theta, char op){
 
 int main(){
 
-	vector<vec3> V = {
-        {0, 0, 0},
-        {1, 0, 0},
-        {1, 1, 0},
-        {0, 1, 0},
-        {0, 0, 1},
-        {1, 0, 1},
-        {1, 1, 1},
-        {0, 1, 1},
-    };
-    vector<size_t> indices = {
-        0, 1,    1, 2,    2, 3,    3, 0,    4, 5,    5, 6,
-        6, 7,    7, 4,    0, 4,    1, 5,    2, 6,    3, 7
-    };
-    Elements<Lines> Le{indices};
+
 
     //mat global = translate(-2,-2,0); // usada para o personagem todo, todas as models começam com ela. Global*Model
 
@@ -57,10 +109,10 @@ int main(){
     translate(-1.25, 2, 0.375)*scale(1.25,3,1.25),
 
     ///Ante-Braço direito
-    rotacao(4,-1.75,(1.25+0.375),-0.3,'x')*translate(4, -1.75, 0.375)*scale(1.25,4,1.25),
+    rotacao(4,2,0,-0.3,'x')*translate(4, -1.75, 0.375)*scale(1.25,4,1.25),
 
     ///Ante-Braço esquerdo
-    rotacao(4,-1.75,(1.25+0.375),-0.3,'x')*translate(-1.25, -1.75, 0.375)*scale(1.25,4,1.25),
+    rotacao(-1.25,2,0,-0.3,'x')*translate(-1.25, -1.75, 0.375)*scale(1.25,4,1.25),
 
     ///Perna esquerda
     translate(0.5,-2.75,0.375)*scale(1.25,3,1.25),
@@ -69,33 +121,19 @@ int main(){
     translate(2.25,-2.75,0.375)*scale(1.25,3,1.25),
 
     ///Canela esquerda
-    translate(0.5,-6.5,0.375)*scale(1.25,4,1.25),
+    rotacao(0.5,-2.75,0,-0.3,'x')*translate(0.5,-6.5,0.375)*scale(1.25,4,1.25),
 
     ///Canela direita
     translate(2.25,-6.5,0.375)*scale(1.25,4,1.25)
     };
 
 
-    Color c = blue;
 
     ///Visão Frontal
     //mat4 View = lookAt({0, 0, 10}, {0, 0, 0}, {0, 1, 0});
-
-    ///Visão lateral
-    mat4 View = lookAt({10, 0, 0}, {0, 0, 0}, {0, 1, 0});
-
-    mat4 Projection = orthogonal(-10, 10, -10, 10, -10, 10);
-
-    Graphics3D G{600, 600};
-    G.clear();
-
-    for(int i=0; i<m.size(); i++){
-        SimpleShader::M = Projection*View*m[i];
-        SimpleShader::C = c;
-        G.draw<SimpleShader::Varying>(V, Le);
-    }
-
-
-    G.savePNG("output.png");
+    Animacao a;
+    setposition(0,0,10,0,1,a);
+    desenhaAnim(m,1,a);
 
 }
+
