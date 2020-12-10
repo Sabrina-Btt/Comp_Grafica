@@ -6,7 +6,7 @@
 #include "Color.h"
 #include "GLutils.h"
 
-///Grupo: Sabrina Sampaio, Tamara Dias, Wanderley Rangel
+
 
 VAO vao;
 GLBuffer vbo, ebo;
