@@ -1,0 +1,615 @@
+#include <GL/glew.h>
+#include <GL/freeglut.h>
+#include <chrono>
+#include <cmath>
+#include "matrix.h"
+#include "MeshData.h"
+#include "ObjMesh.h"
+
+
+VAO vao;
+GLBuffer vbo, ebo;
+MeshData house;
+MeshData house1;
+MeshData house2;
+MeshData wall;
+MeshData sky;
+MeshData surface;
+MeshData horse;
+MeshData road;
+MeshData chicken2;
+vector <MeshData*> boneco;
+vector<MeshData> membros;
+
+mat4 Projection, View, Model;
+int choice = 1;
+int temp=0;
+float vangle = 0;
+mat4 BaseView = lookAt({30, 5, 0}, {0, 5, 0}, {0, 1, 0});
+int shadow = 0;
+
+vec3 light_position;
+
+ShaderProgram shadowShaderProgram;
+GLTexture depthMap;
+unsigned int depthMapFBO;
+const int SHADOW_WIDTH = 800, SHADOW_HEIGHT = 600;
+mat4 lightSpaceMatrix;
+
+
+
+ShaderProgram shaderProgram;
+ShaderProgram skyboxShaderProgram;
+
+struct RayTracing{
+	VAO vao;
+	GLBuffer vbo;
+	ShaderProgram shaderProgram;
+	ShaderProgram shadowShaderProgram;
+
+	void init(){
+		Shader vertex_shader{"RayTracing.vert", GL_VERTEX_SHADER};
+
+		shaderProgram = ShaderProgram{
+			vertex_shader,
+			Shader{"RayTracing01.frag", GL_FRAGMENT_SHADER}
+		};
+		shadowShaderProgram = ShaderProgram{
+			vertex_shader,
+			Shader{"RayTracingDepth01.frag", GL_FRAGMENT_SHADER}
+		};
+
+		vector<vec3> P = {
+			{-1, -1, -1},  {1, -1, -1},
+			{1, 1, -1},  {-1, 1, -1},
+		};
+
+		vao = VAO{true};
+		glBindVertexArray(vao);
+
+		vbo = GLBuffer(GL_ARRAY_BUFFER);
+		vbo.data(P, GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	}
+
+	void draw_depth(mat4 Projection, mat4 View){
+		glUseProgram(shadowShaderProgram);
+		Uniform{"Projection"} = Projection;
+		Uniform{"View"} = View;
+
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	}
+
+	void draw(mat4 Projection, mat4 View){
+		glUseProgram(shaderProgram);
+		Uniform{"Projection"} = Projection;
+		Uniform{"View"} = View;
+		Uniform{"lightPos"} = light_position;
+
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	}
+
+}ray_tracing;
+
+void initShadowBuffer(){
+	depthMap = GLTexture{GL_TEXTURE_2D};
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+			SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+
+	float borderColor[] = {1, 1, 1, 1};
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+	glGenFramebuffers(1, &depthMapFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+
+	// Associa a textura ao framebuffer
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+
+	// Volta ao framebuffer padrão
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+
+GLTexture loadCubemap(const char* files[6]){
+	GLTexture cubemap{GL_TEXTURE_CUBE_MAP};
+
+	cubemap.load(files[0], GL_TEXTURE_CUBE_MAP_POSITIVE_X);
+	cubemap.load(files[1], GL_TEXTURE_CUBE_MAP_NEGATIVE_X);
+	cubemap.load(files[2], GL_TEXTURE_CUBE_MAP_POSITIVE_Y);
+	cubemap.load(files[3], GL_TEXTURE_CUBE_MAP_NEGATIVE_Y);
+	cubemap.load(files[4], GL_TEXTURE_CUBE_MAP_POSITIVE_Z);
+	cubemap.load(files[5], GL_TEXTURE_CUBE_MAP_NEGATIVE_Z);
+
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	return cubemap;
+}
+
+///Função para cálculo de rotações
+mat4 rotacao(vec3 v, float theta, char op){
+    mat4 rot;
+    switch(op){
+        case'x':{
+            rot = translate(v.x,v.y,v.z)*rotate_x(theta)*translate(-v.x,-v.y,-v.z);
+            break;
+        }
+        case'y':{
+            rot = translate(v.x,v.y,v.z)*rotate_y(theta)*translate(-v.x,-v.y,-v.z);
+            break;
+        }
+        case'z':{
+            rot = translate(v.x,v.y,v.z)*rotate_z(theta)*translate(-v.x,-v.y,-v.z);
+            break;
+        }
+    } return rot;
+}
+
+///Vetor contendo os eixos de rotação dos membros //
+vector<vec3> eixosRot={
+    {},{4, 5, 1.625}, {0, 5, 1.625}, {4, -3, 1.625}, {0, -3, 1.625}, {0.5, 0.25, 1.625},
+    {2.25, 0.25, 1.625}, {0.5, -3.5, 1.625}, {2.25, -3.5, 1.625}
+    };
+
+vector<mat4> base = {
+    ///Cabeça
+    translate(1.3,7.5,0.5)*scale(1.5,2,1.5),
+
+    ///Corpo
+    translate(1.3,2,0.5)*scale(2,3.5,2),
+
+    ///Braço direito
+    translate(4,2, 0.375)*scale(0.8,3,0.8),
+
+    ///Braço esquerdo
+    translate(-1.25, 2, 0.375)*scale(0.8,3,0.8),
+
+    ///Ante-Braço direito
+    rotacao({4,2,0},-0.3,'x')*translate(4, -2.75, 0.375)*scale(0.8,3,0.8), //-1.75
+
+    ///Ante-Braço esquerdo
+    rotacao({-1.25,2,0},-0.3,'x')*translate(-1.25, -2.75, 0.375)*scale(0.8,3,0.8),
+
+    ///Perna esquerda
+    translate(0.5,-2.75,0.375)*scale(0.8,3,0.8),
+
+    ///Perna direita
+    translate(2.25,-2.75,0.375)*scale(0.8,3,0.8),
+
+    ///Canela esquerda
+    translate(0.5,-7.5,0.375)*scale(0.8,3,0.8),
+
+    ///Canela direita
+    translate(2.25,-7.5,0.375)*scale(0.8,3,0.8)
+    };
+
+///Estrutura que possui características do nosso personagem, como velocidade e sentido dos movimentos
+struct anim{
+    float velX,velY,velZ,constRotH,constRotR;
+    double tempo = 0,t=0;
+    float qntRotH,qntRotR;
+    float temporizador = 1;
+    float temporizadorR = 0;
+    int sentido = 1;
+    int sentidoR = 1;
+    double ultimoTempo;
+}typedef Animacao;
+Animacao a;
+
+
+///Função para calcular a quantidade de movimento (incluindo as rotações)
+void setposition(float deltaX, float deltaY,float deltaZ,float gRotH,float gRotR,float tempo,Animacao& anim  ){
+    anim.velX=(deltaX/tempo);
+    anim.velY=(deltaY/tempo);
+    anim.velZ=(deltaZ/tempo);
+    float p = M_PI*gRotH/180;
+    float p1 = M_PI*gRotR/180;
+    anim.constRotH=p/60;
+    anim.constRotR=p1/60;
+    a.ultimoTempo = 0.0;
+}
+
+///Função para resetar a posição do personagem na troca de visões
+void resetPosition(Animacao& a, float tempo){
+    a.tempo = 0;
+    a.temporizador = 1;
+    a.temporizadorR = 0;
+    a.sentido = 1;
+    a.sentidoR = 1;
+    a.ultimoTempo = tempo;
+    a.qntRotH=0;
+    a.qntRotR=0;
+    temp=0;
+}
+
+
+
+
+void init(){
+	glewInit();
+	glEnable(GL_DEPTH_TEST);
+
+	for(int i=0; i<10; i++){
+        membros.push_back(surface_mesh(50, 50));
+        membros[i].init_texture("azul.jpg");
+	}
+
+	road = MeshData{"road.obj"};
+	road.init_texture("road.jpg");
+	road.Model = translate(1,-1.1,1)*rotate_y(1.5708)*scale(1.25, 1, 2);
+
+	house = MeshData{"house/house1.obj"};
+	house.init_texture("house/texture1.jpg");
+	house.Model = translate(-8,0,-13)*rotate_y(1.5708)*scale(3, 3, 3);
+
+	house1 = MeshData{"house/house1.obj"};
+	house1.init_texture("house/texture2.jpg");
+	house1.Model = translate(-8,0,0)*rotate_y(1.5708)*scale(3, 3, 3);
+
+    house2 = MeshData{"house/house1.obj"};
+	house2.init_texture("house/texture1.jpg");
+	house2.Model = translate(-8,0,13)*rotate_y(1.5708)*scale(3, 3, 3);
+
+	horse = MeshData{"animals/Horse.obj"};
+	horse.init_texture("animals/Horse.png");
+	horse.Model = translate(7,0,3)*rotate_y(1)*scale(0.3, 0.3, 0.3);
+
+	chicken2 = MeshData{"animals/chicken2.obj"};
+	chicken2.init_texture("animals/chicken2.png");
+	chicken2.Model = translate(8,0.5,5)*rotate_y(1.74533)*scale(0.01, 0.01, 0.01);
+
+	wall = MeshData{"modelos/wall.obj"};
+	wall.init_texture("grama.jpg");
+	wall.Model = scale(20, 20, 20);
+
+    shadowShaderProgram = ShaderProgram{
+		Shader{"shadow.vert", GL_VERTEX_SHADER}
+	};
+
+	shaderProgram = ShaderProgram{
+		Shader{"PhongShaderShadow.vert", GL_VERTEX_SHADER},
+		Shader{"PhongShaderShadow.frag", GL_FRAGMENT_SHADER}
+	};
+	glUseProgram(shaderProgram);
+
+	Uniform{"mat_specular"}  = vec4{ 1.0, 1.0, 1.0, 1.0 };
+	Uniform{"mat_ambient"}   = vec4{0.7, 0.7, 1.0, 1.0};
+	Uniform{"mat_shininess"} = 40.0f;
+
+
+	light_position = {100, 20, 40};
+	Uniform{"light_position"} = toVec4(light_position, 1);
+	Uniform{"light_ambient"}  = vec4{ 0.5, 0.5, 0.5, 1.0 };
+	Uniform{"light_diffuse"}  = vec4{ 1.0, 1.0, 1.0, 1.0 };
+	Uniform{"light_specular"} = vec4{ 1.0, 1.0, 1.0, 1.0 };
+
+	skyboxShaderProgram = ShaderProgram{
+		Shader{"cubemap.vert", GL_VERTEX_SHADER},
+		Shader{"cubemap.frag", GL_FRAGMENT_SHADER}
+	};
+
+	const char* files[6] = {
+		"skybox/right.png",
+		"skybox/left.png",
+		"skybox/top.png",
+		"skybox/bottom.png",
+		"skybox/front.png",
+		"skybox/back.png"
+	};
+
+	sky = MeshData{"modelos/box.obj"};
+	sky.Model = loadIdentity();
+	sky.texture = loadCubemap(files);
+
+
+	setposition(0,0,70,90,45,10,a);
+	initShadowBuffer();
+	//ray_tracing.init();
+}
+
+void draw_skybox(mat4 Projection, mat4 View){
+
+	View[0][3] = View[1][3] = View[2][3] = 0;
+    glUseProgram(skyboxShaderProgram);
+	Uniform{"Projection"} = Projection;
+	Uniform{"View"} = View;
+	Uniform{"Model"} = sky.Model;
+
+	glDepthMask(GL_FALSE);
+	sky.draw();
+	glDepthMask(GL_TRUE);
+}
+
+void draw(MeshData& mesh, vec4 mat_specular, float mat_shininess){
+	Uniform{"Model"} = mesh.Model;
+	Uniform{"mat_specular"}  = mat_specular;
+	Uniform{"mat_shininess"} = mat_shininess;
+	mesh.draw();
+}
+
+float get_time(){
+	using namespace std::chrono;
+	static auto start = high_resolution_clock::now();
+	duration<float> dif = high_resolution_clock::now() - start;
+	return dif.count();
+}
+
+vector<mat4> movimento(vector<mat4> base, Animacao& a){
+    if(a.temporizador == 2){    //O temporizador checa se o movimento de rotação está completo, caso esteja,
+            a.sentido*=-1;      //o sentido da rotação é invertido. Vale ressaltar que o movimento completo
+            a.temporizador=0;   //dura 2 segundos
+        }
+
+    if(a.temporizadorR == 2){    //O temporizador de rotação possui a mesma função do tamporizador, porém é
+            a.sentidoR*=-1;      //específico para os braços e pernas do personagem pois o movimento de rotação
+            a.temporizadorR=0;   //ocorre em instantes de tempo diferentes
+        }
+
+    a.qntRotH += a.constRotH*a.sentido;
+    a.qntRotR += a.constRotR*a.sentido;
+     vector<mat4> mov {
+        ///Cabeça
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo),
+        ///Corpo
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo),
+        ///Braço direito
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[1], a.qntRotR, 'x'),
+        ///Braço esquerdo
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[2], -a.qntRotR, 'x'),
+        ///Ante-Braço direito
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[3], (-a.qntRotR/4)*a.sentidoR, 'x')*rotacao(eixosRot[1], a.qntRotR, 'x'),
+        ///Ante-Braço esquerdo
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[4], (-a.qntRotR/4)*a.sentidoR, 'x')*rotacao(eixosRot[2], -a.qntRotR, 'x'),
+        ///Perna esquerda
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[5], a.qntRotR, 'x'),
+        ///Perna direita
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[6], -a.qntRotR, 'x'),
+        ///Canela esquerda
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[7], (a.qntRotR/3)*a.sentidoR, 'x')*rotacao(eixosRot[5], a.qntRotR, 'x'),
+        ///Canela direita
+        translate(a.velX*a.tempo,a.velY*a.tempo,a.velZ*a.tempo)*rotacao(eixosRot[8], (a.qntRotR/3)*a.sentidoR, 'x')*rotacao(eixosRot[6], -a.qntRotR, 'x')
+    };
+
+    vector<mat4> m;
+    for(int i=0;i<base.size();i++){
+        m.push_back(mov[i]*base[i]);
+    }
+    return m;
+}
+
+void idle(int){
+	glutPostRedisplay();
+	glutTimerFunc(1000/60, idle, 0);
+}
+
+
+void draw_scene(mat4 Projection, mat4 View){
+	//glUseProgram(shaderProgram);
+	Uniform{"Projection"} = Projection;
+	Uniform{"View"} = View;
+
+    glActiveTexture(GL_TEXTURE0);
+	Uniform{"light_specular"}  = vec4{ 0.0, 0.0, 0.0, 1.0 };
+	draw(wall,    { 0, 0, 0, 1 }, 40.0f);
+	Uniform{"light_specular"}  = vec4{ 1.0, 1.0, 1.0, 1.0 };
+	draw(house,    { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+	draw(house1,    { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+	draw(house2,    { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+	draw(horse,    { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+	draw(chicken2,    { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+	draw(road,    { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+}
+
+void draw_personagem(){
+    ///Corpo
+    vector<mat4> m = movimento(base,a);
+    for(int i=0; i<m.size(); i++){
+        m[i]=translate(-1,2.7,-8)*scale(0.25,0.25,0.25)*m[i];
+        membros[i].Model=m[i];
+        boneco.push_back(&membros[i]);
+        //draw_circle();
+    }
+}
+void draw_circle(){
+	//glUseProgram(shaderProgram);
+	glActiveTexture(GL_TEXTURE0);
+	Uniform{"Projection"} = Projection;
+	Uniform{"View"} = View;
+    for(int i=0;i<boneco.size();i++){
+        draw(*boneco[i], { 0.0, 0.0, 0.0, 1.0 }, 1.0f);
+    }
+
+}
+
+void draw_shadow_buffer(){
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+	glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(shadowShaderProgram);
+
+	float b = SHADOW_WIDTH/(float)SHADOW_HEIGHT;
+	View = lookAt(light_position, {0, 5, 0}, {0, 1, 0});
+
+	Uniform{"Projection"} = Projection;
+	Uniform{"View"} = View;
+
+	lightSpaceMatrix = Projection*View;
+
+	draw_scene(Projection,View);
+    draw_circle();
+    //ray_tracing.draw_depth(Projection, View);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void desenha(){
+	int w = glutGet(GLUT_WINDOW_WIDTH);
+	int h = glutGet(GLUT_WINDOW_HEIGHT);
+	glViewport(0, 0, w, h);
+
+	glClearColor(1, 1, 1, 1);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(shaderProgram);
+	float b = w/(float)h;
+
+    float duration = 10;
+    float aCam=0.53/duration;
+
+    a.tempo = (get_time() - a.ultimoTempo);
+    if(floor(a.tempo)!= temp ){
+        temp++;
+        a.temporizador++;
+        a.temporizadorR++;
+    }
+
+
+    Uniform{"LightSpaceMatrix"} = lightSpaceMatrix;
+
+	Uniform{"mat_texture"} = 0;
+
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	Uniform{"shadow_map"} = 5;
+
+	switch(choice){
+        case 1:{
+           glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+           View = translate(0,-4,0)*lookAt({0, 0, 1}, {0, 0, 0}, {0, 1, 0});
+           Projection = orthogonal(-10, 10, -10, 10, -w, w);
+           break;
+        }
+        case 2:{
+            glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+            View = translate(0,-4,0)*lookAt({1, 0, 0}, {0, 0, 0}, {0, 1, 0});
+            Projection = orthogonal(-10, 10, -10, 10, -10, 10);
+            break;
+        }
+        case 3:{
+            glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+            View = rotate_y(-aCam*a.tempo)*lookAt({30, 5, 0}, {0, 5, 0}, {0, 1, 0});
+            Projection = scale(1,1,-1)*perspective(45, b, 0.1, 500);
+            break;
+        }
+        case 4:{
+            glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+            View = BaseView;
+            Projection = scale(1,1,-1)*perspective(45, b, 0.1, 500);
+            break;
+        }
+    }
+     if(choice == 3 || choice==4)
+        draw_skybox(Projection, View);
+    glUseProgram(shaderProgram);
+	draw_scene(Projection, View);
+    //draw_personagem();
+    draw_circle();
+    //ray_tracing.draw(Projection, View);
+
+
+	if(a.tempo>duration){
+        resetPosition(a,get_time());
+	}
+	glutSwapBuffers();
+}
+
+
+void desenhaTudo(){
+    draw_personagem();
+    draw_shadow_buffer();
+	desenha();
+	boneco.clear();
+}
+
+void keyboard(unsigned char c, int x, int y){
+	if(c == '1'){
+        choice = 1;
+        resetPosition(a,get_time());
+	}else if(c == '2'){
+	    choice = 2;
+	    resetPosition(a,get_time());
+	} else if(c == '3'){
+	    choice = 3;
+	    resetPosition(a,get_time());
+	}
+    else if(c == '4'){
+        choice = 4;
+        resetPosition(a,get_time());
+    }
+
+}
+
+int last_x, last_y;
+void mouse(int button, int state, int x, int y){
+	last_x = x;
+	last_y = y;
+}
+
+void mouseMotion(int x, int y){
+	int dx = x - last_x;
+	int dy = y - last_y;
+
+	vangle += 0.01*dy;
+	vangle = clamp(vangle, -1.5, 1.5);
+	BaseView = rotate_y(dx*0.01)*BaseView;
+
+	last_x = x;
+	last_y = y;
+	//glutPostRedisplay();
+}
+
+void special(int key, int x, int y){
+	float zmove = 0;
+	float xmove = 0;
+
+	if(key == GLUT_KEY_UP)
+		zmove += 0.2;
+
+	if(key == GLUT_KEY_DOWN)
+		zmove -= 0.2;
+
+	if(key == GLUT_KEY_LEFT)
+		xmove += 0.2;
+
+	if(key == GLUT_KEY_RIGHT)
+		xmove -= 0.2;
+
+	BaseView = translate(xmove, 0, zmove)*BaseView;
+	//glutPostRedisplay();
+}
+
+int main(int argc, char* argv[]){
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_MULTISAMPLE | GLUT_DEPTH);
+	glutInitWindowSize(800, 600);
+	glutInitContextVersion(3, 3);
+	glutInitContextProfile(GLUT_CORE_PROFILE);
+	glutCreateWindow("trabalho");
+	glutDisplayFunc(desenhaTudo);
+    idle(0);
+	glutKeyboardFunc(keyboard);
+
+    glutMouseFunc(mouse);
+	glutMotionFunc(mouseMotion);
+	glutSpecialFunc(special);
+
+	printf("GL Version: %s\n", glGetString(GL_VERSION));
+	printf("GLSL Version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+	init();
+	glutMainLoop();
+}
